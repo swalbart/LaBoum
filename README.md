@@ -2,16 +2,16 @@
 ## <#>-------------<=======[ Description ]=======>-------------<#>
 
 English:  
-    LaBoum is a One Piece themed dice-rolling bot for Discord.  
-    Its main function is to roll dice.
-    The bot is currently only available in english. A german translation is already planned for a future update.  
-    The rest of the README.md is only available in english language for the time being.  
+LaBoum is a One Piece themed dice-rolling bot for Discord.  
+Its main function is to roll dice.
+The bot is currently only available in english. A german translation is already planned for a future update.  
+The rest of the README.md is only available in english language for the time being.  
 
 Deutsch:  
-    LaBoum ist ein, an One Piece thematisch angepasster Würfel-Bot für Discord.  
-    Seine Hauptfunktion ist es zu würfeln.
-    Der Bot ist aktuell nur in englisch verfügbar. Eine Deutsch-übersetzung ist bereits in planung.
-    Der Rest der README.md ist vorerst nur in englisch verfügbar.  
+LaBoum ist ein, an One Piece thematisch angepasster Würfel-Bot für Discord.  
+Seine Hauptfunktion ist es zu würfeln.
+Der Bot ist aktuell nur in englisch verfügbar. Eine Deutsch-übersetzung ist bereits in planung.
+Der Rest der README.md ist vorerst nur in englisch verfügbar.  
 
 
 ## <#>-------------<=======[ Disclaimer ]=======>-------------<#>
@@ -27,8 +27,8 @@ Now you need a place to host the bot. If you need it running 24/7 you should con
 Optional: You can give your bot a discord-role for better rights management.  
 
 ## <#>-------------<=======[ Commands ]=======>-------------<#> 
-    All listed bot commands are slash-commands.
-    This means discord will automaticly list the available commands as part of its built-in commands after typing a "/" (slash) as first character of the command.  
+All listed bot commands are slash-commands.
+This means discord will automaticly list the available commands as part of its built-in commands after typing a "/" (slash) as first character of the command.  
     
   
 ### Help:
