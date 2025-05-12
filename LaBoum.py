@@ -1,6 +1,7 @@
 import discord
 import random
 import os
+import re
 from discord.ext import commands
 from discord import app_commands
 
@@ -29,72 +30,117 @@ bot = LaBoumBot()
 async def help(interaction: discord.Interaction):
     response = "**LaBoum Help:**"
     response += "\n```"
-    response += "\n Command       | Description |"
-    response += "\n---------------+------------------------------"
-    response += "\n /help         | Displays all LaBoum commands"
-    response += "\n /roll XdY     | Roll from 1 up to 100 any-sided dice and optional"
-    response += "\n       XdY#Z   | modify the result with '+-*/' (2d20 or 2d20+3)"
+    #response += "\n Command       | Description |"
+    #response += "\n---------------+------------------------------"
     response += "\n /advantage    | Rolls 2d20 for you and highlights the greater one"
+    response += "\n /credits      | Displays creator credits"
     response += "\n /disadvantage | Rolls 2d20 for you and highlights the lower one"
-    response += "\n /credits      | Displays credits"
+    response += "\n /help         | Displays all LaBoum commands"
+    response += "\n /roll _d_+_   | Roll any dice combination (optional modify with '+-*/')"
+    response += "\n  Example      : 2d8+2+d4-3 or d12+4 + 3d8+2 + d4"
     response += "\n```"
     await interaction.response.send_message(response)
 
-@app_commands.command(name="roll", description="Roll any dice (z.B. 2d6, d20, 4d10)")
-@app_commands.describe(dice="Format: XdY, z.B. 3d6 or d20")
+@app_commands.command(name="roll", description="Roll any dice combination")
+@app_commands.describe(dice="Z. B. (2d6+4)/2 + d4 + 2*d8")
 async def roll_dynamic(interaction: discord.Interaction, dice: str):
     try:
-        dice = dice.lower().replace(" ", "").strip()
         secure_random = random.SystemRandom()
-        operator = None
-        modifier = 0
+        expr = dice.lower().replace(" ", "")
+        roll_log = []
+        total = 0
 
-        for op in ['+', '-', '*', '/']:
-            if op in dice:
-                operator = op
-                parts = dice.split(op)
-                if len(parts) != 2:
-                    raise ValueError("Invalid expression")
-                dice_part, mod_part = parts
-                modifier = int(mod_part)
-                break
-        else:
-            # command does not contain operator
-            dice_part = dice
+        # Formatierfunktion für die ursprüngliche Benutzereingabe
+        def format_user_expression(expr_raw: str) -> str:
+            expr = expr_raw.lower().strip()
+            dice_parts = re.findall(r'(\d*d\d+(?:[+\-*/]\d+)?)', expr)
+            formatted_parts = []
 
-        if 'd' not in dice_part:
-            raise ValueError("Invalid expression - use format: 2d6 or d20")
-        
-        num_str, sides_str = dice_part.split('d')
-        amount = int(num_str) if num_str else 1
-        sides = int(sides_str)
+            last_index = 0
+            for part in dice_parts:
+                start = expr.find(part, last_index)
+                end = start + len(part)
+                prefix = expr[last_index:start]
+                formatted_parts.append(prefix.strip())
 
-        if amount < 1 or amount > 100:
-            raise ValueError("Amount of dice has to be between 1 and 100")
-        if sides < 2:
-            raise ValueError("Dice need to have at least 2 sides")
-        
-        rolls = [secure_random.randint(1, sides) for _ in range(amount)]
-        total = sum(rolls)
-        expression = ""
+                if part.startswith("1d"):
+                    part = part[1:]
+                formatted_parts.append(part)
+                last_index = end
 
-        if operator:
-            if operator == '+':
-                total += modifier
-            elif operator == '-':
-                total -= modifier
-            elif operator == '*':
-                total *= modifier
-            elif operator == '/':
-                total /= modifier
-            expression += f"{operator}{modifier}"
+            formatted_parts.append(expr[last_index:].strip())
+            final = ' '.join(p for p in formatted_parts if p)
+            return final
 
-        response = f'{amount}d{sides}: {rolls} {expression} = **{total}**'
+        # Muster für Teilausdrücke: z.B. "2d6+4", "1d8", "d12", etc.
+        dice_pattern = re.compile(r'((\d*)d(\d+))([+\-*/]\d+)?')
 
-        await interaction.response.send_message(response)
+        # Ausdruck parsen & ersetzen
+        def replace_group(match):
+            nonlocal total
+            dice_expr = match.group(1)  # z.B. "2d6"
+            count = int(match.group(2)) if match.group(2) else 1
+            sides = int(match.group(3))
+            mod_expr = match.group(4)  # z.B. "+4"
+
+            if not (1 <= count <= 100 and 2 <= sides <= 1000):
+                raise ValueError(f"Ungültiger Würfel: {dice_expr}")
+
+            rolls = [secure_random.randint(1, sides) for _ in range(count)]
+            rolls_sum = sum(rolls)
+
+            mod_str = ""
+            mod_val = 0
+            if mod_expr:
+                operator = mod_expr[0]
+                operand = int(mod_expr[1:])
+                mod_val = {
+                    '+': rolls_sum + operand,
+                    '-': rolls_sum - operand,
+                    '*': rolls_sum * operand,
+                    '/': round(rolls_sum / operand, 2)
+                }[operator]
+                mod_str = f" {operator}{operand}"
+            else:
+                mod_val = rolls_sum
+
+            total += mod_val
+
+            # Ausdrucks-Darstellung
+            roll_line = f"• {count}d{sides}{mod_str} → {rolls}"
+            if mod_str:
+                roll_line += f" = {mod_val}"
+            else:
+                roll_line += f" = {rolls_sum}"
+            roll_log.append(roll_line)
+
+            return str(mod_val)  # Rückgabe für spätere eval(), falls nötig
+
+        # Ausdruck analysieren und alle Teildice ersetzen
+        parsed_expr = dice_pattern.sub(replace_group, expr)
+
+        # Sichere letzte Prüfung (z. B. bei Restzeichen wie "+2" am Ende)
+        if not re.fullmatch(r'[\d\+\-\*/\(\)\.]+', parsed_expr):
+            raise ValueError("Ungültige Zeichen im Ausdruck")
+
+        # Optional auswerten, wenn Klammern da sind
+        if '(' in parsed_expr or ')' in parsed_expr or any(op in parsed_expr for op in '*/-+'):
+            total = eval(parsed_expr)
+
+        total = round(total, 2) if isinstance(total, float) else total
+
+        # Ausdruck des Users formatiert anzeigen
+        formatted_input = format_user_expression(dice)
+
+        antwort = f'## {interaction.user.mention}: {total}\n>>> '
+        antwort += "\n".join(roll_log)
+        antwort += f'\n```/roll dice: {formatted_input}```'
+
+        await interaction.response.send_message(antwort)
 
     except Exception as e:
-        await interaction.response.send_message(f'Error: {str(e)}')
+        await interaction.response.send_message(f'⚠️ Fehler: {str(e)}')
+
 
 @app_commands.command(name="advantage", description="Rolls a 20-sided dice with advantage.")
 async def advantage_command(interaction: discord.Interaction):
@@ -104,7 +150,10 @@ async def advantage_command(interaction: discord.Interaction):
     roll_higher = rolls[0]
     if rolls[1] > rolls[0]:
         roll_higher = rolls[1]
-    response = f'2d20 with advantage: {rolls} => {roll_higher}'
+    #response = f'2d20 with advantage: {rolls} => {roll_higher}'
+    response = f'## {interaction.user.mention}: {roll_higher}\n>>> '
+    response += f'• 2d20 → {rolls}'
+    response += f'\n```/advantage```'
     await interaction.response.send_message(response)
 
 @app_commands.command(name="disadvantage", description="Rolls a 20-sided dice with disadvantage.")
@@ -115,15 +164,18 @@ async def disadvantage_command(interaction: discord.Interaction):
     roll_lower = rolls[0]
     if rolls[1] < rolls[0]:
         roll_lower = rolls[1]
-    response = f'2d20 with disadvantage: {rolls} => {roll_lower}'
+    #response = f'2d20 with disadvantage: {rolls} => {roll_lower}'
+    response = f'## {interaction.user.mention}: {roll_lower}\n>>> '
+    response += f'• 2d20 → {rolls}'
+    response += f'\n```/disadvantage```'
     await interaction.response.send_message(response)
 
 @app_commands.command(name="credits", description="Displays credits")
 async def credits(interaction: discord.Interaction):
-    response = "**LaBoum Credits:**"
-    response += "\nLaBoum by Swali (swalbart)"
-    response += "\n<https://github.com/swalbart>"
-    response += "\n<https://github.com/swalbart/LaBoum>"
+    response = "### LaBoum Credits"
+    response += "\n[LaBoum](<https://github.com/swalbart/LaBoum>) by [Swali (swalbart)](<https://github.com/swalbart>)"
+    response += "\nUsed ressources: Visual Studio Code; Pyhton3; coffee"
+    response += "\nLicense: [MIT License](<https://choosealicense.com/licenses/mit/>)"
     response += "\n*No Minks were harmed during the production of LaBoum*"
     await interaction.response.send_message(response)
 
